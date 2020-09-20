@@ -38,9 +38,10 @@ footer {visibility:hidden;}
         img_to_bytes('header.png')
     )
     st.markdown(header_html, unsafe_allow_html=True)
+
     return None
 
-@st.cache
+#@st.cache
 def get_data():
 
     cbc_url = 'http://www.chp.gov.hk/files/misc/enhanced_sur_covid_19_eng.csv'
@@ -60,7 +61,15 @@ def get_data():
                           'HK/Non-HK resident':'resident',
                           'Case classification*':'type'}, inplace=True)
 
-    cbc['type'] = cbc['type'].str.replace('Epidemiologically linked', 'Linked', case=False)
+    cbc['type'] = cbc['type'].str.replace('Epidemiologically linked', 'Linked', case=True)
+    cbc['type'] = cbc['type'].str.replace('Linked with possibly l', 'Linked with l', case=True)
+    cbc['type'] = cbc['type'].str.replace('Possibly l', 'L', case=True)
+
+    cbc['type'] = cbc['type'].str.replace('Imported', '1. Imported', case=True)
+    cbc['type'] = cbc['type'].str.replace('Linked with i', '2. Linked with i', case=True)
+    cbc['type'] = cbc['type'].str.replace('Local', '3. Local', case=True)
+    cbc['type'] = cbc['type'].str.replace('Linked with l', '4. Linked with l', case=True)
+
     cbc.set_index('case_num', inplace=True)
     cbc['report_date'] = pd.to_datetime(cbc['report_date'], dayfirst=True)
     cbc['report_date_d'] = cbc['report_date'].dt.date
@@ -93,10 +102,10 @@ def get_data():
 
 def footer():
     st.markdown('---')
-    st.markdown('''<img src='data:image/png;base64,{}' class='img-fluid' width=64 height=64>'''.format(img_to_bytes("brain.png")), unsafe_allow_html=True)
-    st.markdown('''<small>covid-hk | Mk 5 | September 2020</small>
-                <br><small>[https://github.com/daniellewisDL/covid-hk](https://github.com/daniellewisDL/covid-hk)</small>
-                <br><small>Data source files: [data.gov.hk](https://data.gov.hk/en-data/dataset/hk-dh-chpsebcddr-novel-infectious-agent)</small>
+    st.markdown('''NB cases reported for a specific date are the cases announced on that date, as of 00:00, and so represent cases in the preceding 24 hours''')
+    st.markdown('---')
+    st.markdown('''<img src='data:image/png;base64,{}' class='img-fluid' width=32 height=32>'''.format(img_to_bytes("brain.png")), unsafe_allow_html=True)
+    st.markdown('''<small>covid-hk | Mk 5 | September 2020 | [https://github.com/daniellewisDL/covid-hk](https://github.com/daniellewisDL/covid-hk) | Data source files: [data.gov.hk](https://data.gov.hk/en-data/dataset/hk-dh-chpsebcddr-novel-infectious-agent)</small>
                 ''', unsafe_allow_html=True)
 
     return None
@@ -116,14 +125,14 @@ def main():
 
     st.subheader(hdr)
     st.markdown('''<span style='color: #f63366; font-size: 50pt;'>{}<b style='color: black; font-size: 20pt;'>cases</b></span>'''.format(recent_case_nums[0]), unsafe_allow_html=True)
-    st.markdown('''<span style='color: black; font-size: 10pt;'><b>{} </b>on {} | <b>{} </b>on {} | <b>{} </b>on {} | <b>{} </b>on {}</span>'''.format(
+    st.markdown('''<span style='color: black; font-size: 10pt;'><b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({})</span>'''.format(
                     recent_case_nums[1], recent_case_dates[1].strftime('%d %b'),
                     recent_case_nums[2], recent_case_dates[2].strftime('%d %b'),
                     recent_case_nums[3], recent_case_dates[3].strftime('%d %b'),
                     recent_case_nums[4], recent_case_dates[4].strftime('%d %b')
                     ), unsafe_allow_html=True)
 
-    st.text('Of which:')
+    st.markdown('''Breakdown of the {} cases on {}:'''.format(recent_case_nums[0], hdr))
     st.write(case_by_case_data[case_by_case_data['report_date_d']==recent_case_dates[0]].type.value_counts())
 
     if st.checkbox('More details on these ', value=False):
@@ -157,6 +166,33 @@ def main():
                         ).interactive()
         st.altair_chart(grouped_chart, use_container_width=True)
 
+        step = 50
+        overlap = 1.1
+        type_counts_chart = alt.Chart(grouped_type_df, height=step
+                ).transform_joinaggregate(
+                    cases='sum(num)', groupby=['type']
+                ).mark_area(
+                ).encode(
+                    x=alt.X('date', axis=alt.Axis(format='%Y-%m-%d', title='Date', labelAngle=-90)),
+                    y=alt.Y('num:Q', axis=None),
+                ).facet(
+                    row=alt.Row(
+                        'type:N',
+                        title=None,
+                        header=alt.Header(labelAngle=0, labelAlign='left')
+                    )
+                ).properties(
+                    title='Cases by type',
+                ).configure_facet(
+                    spacing=-200
+                ).configure_view(
+                    stroke=None
+                ).configure_title(
+                    anchor='end'
+                )
+        st.altair_chart(type_counts_chart, use_container_width=True)
+
+
         st.markdown('---')
         st.subheader('Get more info on a specific date')
         dt = st.date_input('Choose specific date', value=recent_case_dates[0])
@@ -166,6 +202,7 @@ def main():
         st.text('Of which:')
         st.write(dt_df.type.value_counts())
         st.write(dt_df)
+
 
 
     footer()
