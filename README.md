@@ -8,3 +8,6 @@ https://covid-hk.herokuapp.com/
 https://share.streamlit.io/daniellewisdl/covid-hk/app.py
 
 (NB for the streamlit share deployment you may need to hit refresh to get latest numbers)
+
+# Show me
+![covid-hk app](https://github.com/daniellewisDL/covid-hk/blob/master/preivew.png)
