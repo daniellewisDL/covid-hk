@@ -136,12 +136,10 @@ def main():
 
     st.subheader(hdr)
 
-    st.markdown('''<span style='color: #f63366; font-size: 50pt;'> {} <b style='color: grey; font-size: 20pt;'> {} ... </b></span><span style='color: grey; font-size: 10pt;'><b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({})</span>'''.format(
+    st.markdown('''<span style='color: #f63366; font-size: 50pt;'> {} <b style='color: grey; font-size: 20pt;'> {} . </b></span><span style='color: grey; font-size: 10pt;'><b> ( {} </b> - {} | <b> {} </b> - {} )</span>'''.format(
                     most_recent_cases[0], case_or_cases,
                     most_recent_cases[1], most_recent_available_date[1].strftime('%d %b'),
-                    most_recent_cases[2], most_recent_available_date[2].strftime('%d %b'),
-                    most_recent_cases[3], most_recent_available_date[3].strftime('%d %b'),
-                    most_recent_cases[4], most_recent_available_date[4].strftime('%d %b')
+                    most_recent_cases[2], most_recent_available_date[2].strftime('%d %b')
                     ), unsafe_allow_html=True)
 
 
