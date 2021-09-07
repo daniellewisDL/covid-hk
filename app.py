@@ -136,25 +136,31 @@ def main():
 
     st.subheader(hdr)
 
-    st.markdown('''<span style='color: #f63366; font-size: 50pt;'>{}<b style='color: grey; font-size: 20pt;'>{}</b></span>'''.format(most_recent_cases[0], case_or_cases), unsafe_allow_html=True)
-    st.markdown('''<span style='color: grey; font-size: 10pt;'><b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({})</span>'''.format(
+    st.markdown('''<span style='color: #f63366; font-size: 50pt;'> {} <b style='color: grey; font-size: 20pt;'> {} ... </b></span><span style='color: grey; font-size: 10pt;'><b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({}) | <b>{} </b>({})</span>'''.format(
+                    most_recent_cases[0], case_or_cases,
                     most_recent_cases[1], most_recent_available_date[1].strftime('%d %b'),
                     most_recent_cases[2], most_recent_available_date[2].strftime('%d %b'),
                     most_recent_cases[3], most_recent_available_date[3].strftime('%d %b'),
                     most_recent_cases[4], most_recent_available_date[4].strftime('%d %b')
                     ), unsafe_allow_html=True)
 
-    st.markdown('''<span style='color: #f63366; font-size: 50pt;'>{}<b style='color: grey; font-size: 20pt;'>first dose</b></span>'''.format(vaccine_data['firstDosePercent'][0]), unsafe_allow_html=True)
-    st.markdown('''<span style='color: #f63366; font-size: 50pt;'>{}<b style='color: grey; font-size: 20pt;'>second dose</b></span>'''.format(vaccine_data['secondDosePercent'][0]), unsafe_allow_html=True)
+
+    st.markdown('''<span style='color: #f63366; font-size: 40pt;'>{}</span><span style='color: #f63366; font-size: 20pt;'>{}<b style='color: grey; font-size: 20pt;'> first dose</b></span>'''.format(str(vaccine_data['firstDosePercent'][0])[0:2],str(vaccine_data['firstDosePercent'][0])[2:]), unsafe_allow_html=True)
+    st.markdown('''<span style='color: #7cfc00; font-size: 10pt;'>{} people</span>'''.format("{:,}".format(vaccine_data['firstDoseTotal'][0])), unsafe_allow_html=True)
+    st.markdown('''<span style='color: #f63366; font-size: 40pt;'>{}</span><span style='color: #f63366; font-size: 20pt;'>{}<b style='color: grey; font-size: 20pt;'> second dose</b></span>'''.format(str(vaccine_data['secondDosePercent'][0])[0:2],str(vaccine_data['secondDosePercent'][0])[2:]), unsafe_allow_html=True)
+    st.markdown('''<span style='color: #7cfc00; font-size: 10pt;'>{} people</span>'''.format("{:,}".format(vaccine_data['secondDoseTotal'][0])), unsafe_allow_html=True)
+    
 
     grouped_type_df = case_by_case_data.groupby(['report_date_d', 'type'], as_index=False)['age'].count()
     grouped_type_df.rename(columns={'report_date_d':'date', 'age':'count_of_type'}, inplace=True)
 
 
+    st.markdown('---')
+
     if st.checkbox('Breakdown of cases', value=False):
         st.markdown('''Breakdown of the {} {} on {}:'''.format(most_recent_cases[0], case_or_cases, hdr))
         st.write(case_by_case_data[case_by_case_data['report_date_d']==most_recent_available_date[0]].type.value_counts())
-    
+
     if st.checkbox('Charts', value=False):
         st.subheader('Summary charts')
 
