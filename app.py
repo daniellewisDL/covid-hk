@@ -1,15 +1,16 @@
 # covid-hk is a simple web app
 # to display the covid HK case numbers and vaccination rates from the HK government data
 # The data is refreshed daily
-# This version v0.6
-# Daniel Lewis September 2021
 
 import streamlit as st
+from st_radial import st_radial
+from st_card import st_card
+import streamlit_apex_charts
 import numpy as np
 import pandas as pd
 import altair as alt
 import datetime
-from pathlib import Path
+from os import path
 import base64
 import requests
 import io
@@ -21,20 +22,24 @@ st.set_page_config(
     #initial_sidebar_state='expanded'
 )
 
-def img_to_bytes(img_path):
-    img_bytes = Path(img_path).read_bytes()
-    encoded = base64.b64encode(img_bytes).decode()
-    return encoded
+# Thanks to GokulNC for this code snippet
+@st.cache(allow_output_mutation=True)
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
 
-def header():
-    
-    #header_html = "<img src='data:image/png;base64,{}' class='img-fluid'>".format(
-    #    img_to_bytes('header.png')
-    #)
-    header_html = "<h1>covid-hk</h1><p><small>the simple tracker for covid cases in HK</small></p>"
-    st.markdown(header_html, unsafe_allow_html=True)
+@st.cache(allow_output_mutation=True)
+def get_img_with_href(local_img_path, target_url):
+    img_format = path.splitext(local_img_path)[-1].replace('.', '')
+    bin_str = get_base64_of_bin_file(local_img_path)
+    html_code = f'''
+        <a href="{target_url}" target="_blank">
+            <img src="data:image/{img_format};base64,{bin_str}" />
+        </a>'''
+    return html_code
 
-    return None
+
 
 #@st.cache
 def get_data():
@@ -102,17 +107,10 @@ def get_data():
 
     return cbc, cum, vac
 
-def footer():
-    st.markdown('---')
-    st.markdown('''NB cases reported for a specific date are the cases announced on that date, as of 00:00, and so represent cases in the preceding 24 hours''')
-    st.markdown('---')
-    st.markdown('''<small>covid-hk | Mk 6 | September 2021 | [https://github.com/daniellewisDL/covid-hk](https://github.com/daniellewisDL/covid-hk) | Data source files: [data.gov.hk](https://data.gov.hk/en-data/dataset/hk-dh-chpsebcddr-novel-infectious-agent)</small>
-                ''', unsafe_allow_html=True)
-    return None
-
 def main():
 
-    header()
+    header_html = "<h1>covid-hk</h1><p><small>the simple tracker for covid cases in HK</small></p>"
+    st.markdown(header_html, unsafe_allow_html=True)
 
     st.markdown('---')
 
@@ -136,18 +134,23 @@ def main():
 
     st.subheader(hdr)
 
-    st.markdown('''<span style='color: #f63366; font-size: 50pt;'> {} <b style='color: grey; font-size: 20pt;'> {} . </b></span><span style='color: grey; font-size: 10pt;'><b> ( {} </b> - {} | <b> {} </b> - {} )</span>'''.format(
-                    most_recent_cases[0], case_or_cases,
-                    most_recent_cases[1], most_recent_available_date[1].strftime('%d %b'),
-                    most_recent_cases[2], most_recent_available_date[2].strftime('%d %b')
-                    ), unsafe_allow_html=True)
+    st_radial('Cases', value = most_recent_cases[0])
 
+    first_dose_percent = vaccine_data['firstDosePercent'][0]
+    first_dose_total = vaccine_data['firstDoseTotal'][0]
+    second_dose_percent = vaccine_data['secondDosePercent'][0]
+    second_dose_total = vaccine_data['secondDoseTotal'][0]
 
-    st.markdown('''<span style='color: #f63366; font-size: 40pt;'>{}</span><span style='color: #f63366; font-size: 20pt;'>{}<b style='color: grey; font-size: 20pt;'> first dose</b></span>'''.format(str(vaccine_data['firstDosePercent'][0])[0:2],str(vaccine_data['firstDosePercent'][0])[2:]), unsafe_allow_html=True)
-    st.markdown('''<span style='color: #7cfc00; font-size: 10pt;'>{} people</span>'''.format("{:,}".format(vaccine_data['firstDoseTotal'][0])), unsafe_allow_html=True)
-    st.markdown('''<span style='color: #f63366; font-size: 40pt;'>{}</span><span style='color: #f63366; font-size: 20pt;'>{}<b style='color: grey; font-size: 20pt;'> second dose</b></span>'''.format(str(vaccine_data['secondDosePercent'][0])[0:2],str(vaccine_data['secondDosePercent'][0])[2:]), unsafe_allow_html=True)
-    st.markdown('''<span style='color: #7cfc00; font-size: 10pt;'>{} people</span>'''.format("{:,}".format(vaccine_data['secondDoseTotal'][0])), unsafe_allow_html=True)
-    
+    st.markdown('---')
+
+    st.subheader('Vaccinations')
+    col1, col2 = st.columns(2)
+    with col1:
+        st_card('First dose', float(first_dose_percent[:4]), unit='%', show_progress=True)
+        st_card('First dose numbers', int(first_dose_total), show_progress=True)
+    with col2:
+        st_card('Second dose', float(second_dose_percent[:4]), unit='%', show_progress=True)
+        st_card('Second dose numbers', int(second_dose_total), show_progress=True)
 
     grouped_type_df = case_by_case_data.groupby(['report_date_d', 'type'], as_index=False)['age'].count()
     grouped_type_df.rename(columns={'report_date_d':'date', 'age':'count_of_type'}, inplace=True)
@@ -155,28 +158,36 @@ def main():
 
     st.markdown('---')
 
-    if st.checkbox('Breakdown of cases', value=False):
-        st.markdown('''Breakdown of the {} {} on {}:'''.format(most_recent_cases[0], case_or_cases, hdr))
-        st.write(case_by_case_data[case_by_case_data['report_date_d']==most_recent_available_date[0]].type.value_counts())
+    st.markdown('''Breakdown of the {} {} on {}:'''.format(most_recent_cases[0], case_or_cases, hdr))
+    st.write(case_by_case_data[case_by_case_data['report_date_d']==most_recent_available_date[0]].type.value_counts())
 
-    if st.checkbox('Charts', value=False):
-        st.subheader('Summary charts')
+    st.subheader('Summary charts')
 
-        row_count = cumulative_data.shape[0]
-        day_count = st.slider('Most recent x days', 1, row_count, 90)
+    row_count = cumulative_data.shape[0]
+    day_count = st.slider('Most recent x days', 1, row_count, 90)
 
+    grouped_chart = alt.Chart(grouped_type_df[(grouped_type_df['date']>=(most_recent_available_date[0]+datetime.timedelta(days=(-1*day_count))))], title='Daily cases by type').mark_bar().encode(
+                    x=alt.X('date', axis=alt.Axis(format='%Y-%m-%d', title='Date', labelAngle=-90)),
+                    y=alt.Y('count_of_type', axis=alt.Axis(title='Cases')),
+                    color=alt.Color('type:N', legend=alt.Legend(orient="bottom"), scale=alt.Scale(scheme='dark2')),
+                    tooltip = [alt.Tooltip(field='date', type='temporal', format='%Y-%m-%d'),
+                                alt.Tooltip(field='type', type='nominal'),
+                                alt.Tooltip(field='count_of_type', title='cases', type='quantitative', format=',')]
+                    ).interactive()
+    st.altair_chart(grouped_chart, use_container_width=True)
 
-        grouped_chart = alt.Chart(grouped_type_df[(grouped_type_df['date']>=(most_recent_available_date[0]+datetime.timedelta(days=(-1*day_count))))], title='Daily cases by type').mark_bar().encode(
-                        x=alt.X('date', axis=alt.Axis(format='%Y-%m-%d', title='Date', labelAngle=-90)),
-                        y=alt.Y('count_of_type', axis=alt.Axis(title='Cases')),
-                        color=alt.Color('type:N', legend=alt.Legend(orient="bottom"), scale=alt.Scale(scheme='dark2')),
-                        tooltip = [alt.Tooltip(field='date', type='temporal', format='%Y-%m-%d'),
-                                   alt.Tooltip(field='type', type='nominal'),
-                                   alt.Tooltip(field='count_of_type', title='cases', type='quantitative', format=',')]
-                        ).interactive()
-        st.altair_chart(grouped_chart, use_container_width=True)
+    new_df = grouped_type_df[(grouped_type_df['date']>=(most_recent_available_date[0]+datetime.timedelta(days=(-1*day_count))))].pivot(index='date', columns='type', values='count_of_type').fillna(value=0).reset_index().drop(columns=['date'])
+    streamlit_apex_charts.bar_chart('title', new_df, stacked=True)
 
-    footer()
+    st.markdown('---')
+    st.markdown('''NB cases reported for a specific date are the cases announced on that date, as of 00:00, and so represent cases in the preceding 24 hours''')
+    st.markdown('---')
+    st.markdown('''<small>Data source files: [data.gov.hk](https://data.gov.hk/en-data/dataset/hk-dh-chpsebcddr-novel-infectious-agent)</small>
+                ''', unsafe_allow_html=True)
+    png_html = get_img_with_href('GitHub-Mark-32px.png', 'https://github.com/daniellewisDL/covid-hk')
+    st.markdown(png_html, unsafe_allow_html=True)
+    png_html = get_img_with_href('GitHub-Mark-Light-32px.png', 'https://github.com/daniellewisDL/covid-hk')
+    st.markdown(png_html, unsafe_allow_html=True)
 
     return None
 
