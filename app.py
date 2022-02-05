@@ -3,9 +3,6 @@
 # The data is refreshed daily
 
 import streamlit as st
-from st_radial import st_radial
-from st_card import st_card
-import streamlit_apex_charts
 import numpy as np
 import pandas as pd
 import altair as alt
@@ -49,22 +46,25 @@ def get_data():
     cbc_data = requests.get(cbc_url).content
     cbc = pd.read_csv(io.StringIO(cbc_data.decode('utf-8')),
                       usecols=['Case no.', 'Report date', 'Age',
-                               'Case classification*']
+                               'Classification*']
                      ).fillna(0)
 
     cbc.rename(columns = {'Case no.':'case_num',
                           'Report date':'report_date',
                           'Age' : 'age',
-                          'Case classification*':'type'}, inplace=True)
+                          'Classification*':'type'}, inplace=True)
 
-    cbc['type'] = cbc['type'].str.replace('Epidemiologically linked', 'Linked', case=True)
-    cbc['type'] = cbc['type'].str.replace('Linked with possibly l', 'Linked with l', case=True)
-    cbc['type'] = cbc['type'].str.replace('Possibly l', 'L', case=True)
+    subst_dict = {  "Epidemiologically linked with local case":"Local linked",
+                    "Imported case":"Imported",
+                    "Local case":"Local",
+                    "Epidemiologically linked with imported case":"Import linked",
+                    "Possibly local case":"Local",
+                    "Epidemiologically linked with possibly local case":"Local linked",
+                    0:"Deleted",
+                    "Possibly import-related case":"Import linked"}
 
-    cbc['type'] = cbc['type'].str.replace('Imported', '1. Imported', case=True)
-    cbc['type'] = cbc['type'].str.replace('Linked with i', '2. Linked with i', case=True)
-    cbc['type'] = cbc['type'].str.replace('Local', '3. Local', case=True)
-    cbc['type'] = cbc['type'].str.replace('Linked with l', '4. Linked with l', case=True)
+    cbc['type'] = cbc['type'].replace(subst_dict)
+    cbc = cbc[cbc.type != "Deleted"]
 
     cbc.set_index('case_num', inplace=True)
     cbc['report_date'] = pd.to_datetime(cbc['report_date'], dayfirst=True)
@@ -98,14 +98,25 @@ def get_data():
     vac_url = 'https://static.data.gov.hk/covid-vaccine/summary.csv'
 
     vac_data = requests.get(vac_url).content
-    vac = pd.read_csv(io.StringIO(vac_data.decode('utf-8')),
-                      usecols=['firstDoseTotal', 'firstDosePercent',
-                               'secondDoseTotal', 'secondDosePercent',
-                               'latestDaily', 'sevenDayAvg', 
-                               'firstDoseDaily', 'secondDoseDaily', 
-                               'totalDosesAdministered']).fillna(0)
+    vac = pd.read_csv(io.StringIO(vac_data.decode('utf-8'))).fillna(0)
 
-    return cbc, cum, vac
+
+    oqc_url = 'http://www.chp.gov.hk/files/misc/occupancy_of_quarantine_centres_eng.csv'
+    oqc_data = requests.get(oqc_url).content
+    oqc = pd.read_csv(io.StringIO(oqc_data.decode('utf-8'))).fillna(0)
+    oqc.drop(oqc[oqc['As of time'] != '9:00'].index, inplace = True)
+    oqc.drop(['As of time', 'Ready to be used (unit)'], axis = 1, inplace=True)
+    oqc.rename(columns = {'As of date':'date',
+                        'Quarantine centres':'qc',
+                        'Address':'address',
+                        'Capacity (unit)' : 'units',
+                        'Current unit in use':'units_in_use',
+                        'Current person in use':'people_in_qc'}, inplace=True)
+    oqc['date'] = pd.to_datetime(oqc['date'], dayfirst=True).dt.date
+    oqc.units = oqc.units.astype(int)
+
+
+    return cbc, cum, vac, oqc
 
 def main():
 
@@ -114,7 +125,7 @@ def main():
 
     st.markdown('---')
 
-    case_by_case_data, cumulative_data, vaccine_data = get_data()
+    case_by_case_data, cumulative_data, vaccine_data, qc_data = get_data()
 
     most_recent_available_date = []
     most_recent_available_date.append(case_by_case_data['report_date_d'].iloc[-1])
@@ -132,40 +143,14 @@ def main():
     else:
         case_or_cases = 'cases'
 
-    st.subheader(hdr)
-
-    st_radial('Cases', value = most_recent_cases[0])
-
-    first_dose_percent = vaccine_data['firstDosePercent'][0]
-    first_dose_total = vaccine_data['firstDoseTotal'][0]
-    second_dose_percent = vaccine_data['secondDosePercent'][0]
-    second_dose_total = vaccine_data['secondDoseTotal'][0]
-
-    st.markdown('---')
-
-    st.subheader('Vaccinations')
-    col1, col2 = st.columns(2)
-    with col1:
-        st_card('First dose', float(first_dose_percent[:4]), unit='%', show_progress=True)
-        st_card('First dose numbers', int(first_dose_total), show_progress=True)
-    with col2:
-        st_card('Second dose', float(second_dose_percent[:4]), unit='%', show_progress=True)
-        st_card('Second dose numbers', int(second_dose_total), show_progress=True)
-
-    grouped_type_df = case_by_case_data.groupby(['report_date_d', 'type'], as_index=False)['age'].count()
-    grouped_type_df.rename(columns={'report_date_d':'date', 'age':'count_of_type'}, inplace=True)
-
-
-    st.markdown('---')
-
-    st.markdown('''Breakdown of the {} {} on {}:'''.format(most_recent_cases[0], case_or_cases, hdr))
+    st.subheader("Cases")
+    st.code(hdr+" | "+str(most_recent_cases[0])+" "+case_or_cases+" recorded")
     st.write(case_by_case_data[case_by_case_data['report_date_d']==most_recent_available_date[0]].type.value_counts())
-
-    st.subheader('Summary charts')
 
     row_count = cumulative_data.shape[0]
     day_count = st.slider('Most recent x days', 1, row_count, 90)
-
+    grouped_type_df = case_by_case_data.groupby(['report_date_d', 'type'], as_index=False)['age'].count()
+    grouped_type_df.rename(columns={'report_date_d':'date', 'age':'count_of_type'}, inplace=True)
     grouped_chart = alt.Chart(grouped_type_df[(grouped_type_df['date']>=(most_recent_available_date[0]+datetime.timedelta(days=(-1*day_count))))], title='Daily cases by type').mark_bar().encode(
                     x=alt.X('date', axis=alt.Axis(format='%Y-%m-%d', title='Date', labelAngle=-90)),
                     y=alt.Y('count_of_type', axis=alt.Axis(title='Cases')),
@@ -177,7 +162,38 @@ def main():
     st.altair_chart(grouped_chart, use_container_width=True)
 
     new_df = grouped_type_df[(grouped_type_df['date']>=(most_recent_available_date[0]+datetime.timedelta(days=(-1*day_count))))].pivot(index='date', columns='type', values='count_of_type').fillna(value=0).reset_index().drop(columns=['date'])
-    streamlit_apex_charts.bar_chart('title', new_df, stacked=True)
+
+
+    first_dose_percent = vaccine_data['firstDosePercent'][0]
+    first_dose_total = vaccine_data['firstDoseTotal'][0]
+    second_dose_percent = vaccine_data['secondDosePercent'][0]
+    second_dose_total = vaccine_data['secondDoseTotal'][0]
+    third_dose_total = vaccine_data['thirdDoseTotal'][0]
+    kids_first_dose = vaccine_data['age5to11FirstDose'][0]
+    kids_second_dose = vaccine_data['age5to11SecondDose'][0]
+
+    st.markdown('---')
+
+    st.subheader('Vaccinations')
+    st.code('First dose: '+"{:,}".format(int(first_dose_total))+" doses - "+str(float(first_dose_percent[:4]))+"% of eligible people")
+    st.code('Second dose: '+"{:,}".format(int(second_dose_total))+" doses - "+str(float(second_dose_percent[:4]))+"% of eligible people")
+    st.code('Third dose: '+"{:,}".format(int(third_dose_total))+" doses")
+    st.code('Ages 5 to 11 first dose: '+"{:,}".format(int(kids_first_dose))+" doses")
+    st.code('Ages 5 to 11 second dose: '+"{:,}".format(int(kids_second_dose))+" doses")
+
+    st.markdown('---')
+
+    st.subheader('Quarantine centres')
+    latest_q_date = max(qc_data.date)
+    total_in_q = qc_data[qc_data.date==latest_q_date].people_in_qc.sum()
+    st.code(latest_q_date.strftime('%a %d %b %Y')+": "+"{:,}".format(total_in_q)+" people in quarantine")
+
+
+    st.write(qc_data[qc_data.date==latest_q_date].drop(["date", "address", "units", "units_in_use"], 1).sort_values("people_in_qc", ascending=False))
+
+    people_in_q_series = qc_data.groupby(qc_data['date']).sum()
+    people_in_q_series.drop(['units', 'units_in_use'], axis=1, inplace=True)
+    st.line_chart(people_in_q_series)
 
     st.markdown('---')
     st.markdown('''NB cases reported for a specific date are the cases announced on that date, as of 00:00, and so represent cases in the preceding 24 hours''')

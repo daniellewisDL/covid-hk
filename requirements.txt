@@ -1,4 +1,1 @@
-streamlit==1.0.0
-st-radial
-st-card
-streamlit-apex-charts
+streamlit==1.5.0
